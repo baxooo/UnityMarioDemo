@@ -69,8 +69,8 @@ crashlytics-build.properties
 /[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
 
 # Temporary auto-generated Android Assets
-/[Aa]ssets/[Ss]treamingAssets/aa.meta
-/[Aa]ssets/[Ss]treamingAssets/aa/*
+/Mario/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/Mario/[Aa]ssets/[Ss]treamingAssets/aa/*
 
 
 Mario/.idea
