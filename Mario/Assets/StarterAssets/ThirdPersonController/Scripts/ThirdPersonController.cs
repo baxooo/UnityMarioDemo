@@ -95,6 +95,16 @@ namespace StarterAssets
         private float _lastZForwardPosition;
         private bool _canOnlyMoveForward = false;
 
+        [Header("Ceiling Detection")]
+        [Tooltip("The height offset for ceiling detection")]
+        public float CeilingOffset = 0.14f;
+
+        [Tooltip("The radius for ceiling detection")]
+        public float CeilingRadius = 0.28f;
+
+        [Tooltip("What layers the character considers as ceiling")]
+        public LayerMask CeilingLayers;
+
 
         private void Awake()
         {            
@@ -154,7 +164,17 @@ namespace StarterAssets
                 _mainCamera.transform.position = new Vector3(_mainCamera.transform.position.x,
                     _mainCamera.transform.position.y, transform.position.z + 4);
             }
-
+            
+            if (transform.position.y > 3.5f)
+            {
+                _mainCamera.transform.position = new Vector3(_mainCamera.transform.position.x,
+                    transform.position.y  , _mainCamera.transform.position.z);
+            }
+            else
+            {
+                _mainCamera.transform.position = new Vector3(_mainCamera.transform.position.x,
+                    3.5f, _mainCamera.transform.position.z);
+            }
         }
 
         private void AssignAnimationIDs()
@@ -313,6 +333,13 @@ namespace StarterAssets
                     }
                 }
 
+                Vector3 ceilingPosition = new Vector3(transform.position.x, transform.position.y + CeilingOffset, transform.position.z);
+                bool hittingCeiling = Physics.CheckSphere(ceilingPosition, CeilingRadius, CeilingLayers, QueryTriggerInteraction.Ignore);
+
+                if (hittingCeiling)
+                {
+                    Gravity = 8000000000f;
+                }
                 // if we are not grounded, do not jump
                 _input.jump = false;
             }
@@ -322,6 +349,8 @@ namespace StarterAssets
             {
                 _verticalVelocity += Gravity * Time.deltaTime;
             }
+
+            Gravity = -15f;
         }
 
         private void OnDrawGizmosSelected()
