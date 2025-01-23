@@ -276,8 +276,6 @@ namespace StarterAssets
                 {
                     _jumpHeight = hit.distance + 0.6f;
                 }
-
-                Debug.Log(_jumpHeight);
             }
         }
 
