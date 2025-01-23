@@ -1,4 +1,7 @@
-﻿ using UnityEngine;
+﻿ using System;
+ using UnityEngine;
+ using UnityEngine.Serialization;
+ using Random = UnityEngine.Random;
 #if ENABLE_INPUT_SYSTEM 
 using UnityEngine.InputSystem;
 #endif
@@ -41,7 +44,7 @@ namespace StarterAssets
 
         [Space(10)]
         [Tooltip("Time required to pass before being able to jump again. Set to 0f to instantly jump again")]
-        public float JumpTimeout = 0.50f;
+        public float JumpTimeout = 0.0f;
 
         [Tooltip("Time required to pass before entering the fall state. Useful for walking down stairs")]
         public float FallTimeout = 0.15f;
@@ -61,7 +64,7 @@ namespace StarterAssets
 
         [Header("Cinemachine")]
         [Tooltip("The follow target set in the Cinemachine Virtual Camera that the camera will follow")]
-        public GameObject CinemachineCameraTarget;
+        public GameObject cameraStartPoint;
 
         // player
         private float _speed;
@@ -82,9 +85,6 @@ namespace StarterAssets
         private int _animIDFreeFall;
         private int _animIDMotionSpeed;
 
-#if ENABLE_INPUT_SYSTEM 
-        private PlayerInput _playerInput;
-#endif
         private Animator _animator;
         private CharacterController _controller;
         private StarterAssetsInputs _input;
@@ -94,16 +94,8 @@ namespace StarterAssets
 
         private float _lastZForwardPosition;
         private bool _canOnlyMoveForward = false;
+        private float _jumpHeight;
 
-        [Header("Ceiling Detection")]
-        [Tooltip("The height offset for ceiling detection")]
-        public float CeilingOffset = 0.14f;
-
-        [Tooltip("The radius for ceiling detection")]
-        public float CeilingRadius = 0.28f;
-
-        [Tooltip("What layers the character considers as ceiling")]
-        public LayerMask CeilingLayers;
 
 
         private void Awake()
@@ -114,7 +106,7 @@ namespace StarterAssets
             if (_mainCamera) return;
             _mainCamera = GameObject.FindGameObjectWithTag("MainCamera");
 
-            var target = CinemachineCameraTarget.transform.position;
+            var target = cameraStartPoint.transform.position;
             _mainCamera.transform.position = new Vector3(target.x, target.y, target.z);
 
         }
@@ -125,11 +117,6 @@ namespace StarterAssets
             _hasAnimator = TryGetComponent(out _animator);
             _controller = GetComponent<CharacterController>();
             _input = GetComponent<StarterAssetsInputs>();
-#if ENABLE_INPUT_SYSTEM 
-            _playerInput = GetComponent<PlayerInput>();
-#else
-			Debug.LogError( "Starter Assets package is missing dependencies. Please use Tools/Starter Assets/Reinstall Dependencies to fix it");
-#endif
 
             AssignAnimationIDs();
 
@@ -203,14 +190,14 @@ namespace StarterAssets
 
         private void Move()
         {
-            // set target speed based on move speed, sprint speed and if sprint is pressed
+            var horizontalInput = Input.GetAxis("Horizontal");
             float targetSpeed = _input.sprint ? SprintSpeed : MoveSpeed;
 
             // a simplistic acceleration and deceleration designed to be easy to remove, replace, or iterate upon
 
             // note: Vector2's == operator uses approximation so is not floating point error prone, and is cheaper than magnitude
             // if there is no input, set the target speed to 0
-            if (_input.move == Vector2.zero) targetSpeed = 0.0f;
+            if (horizontalInput == 0) targetSpeed = 0.0f;
 
             // a reference to the players current horizontal velocity
             float currentHorizontalSpeed = new Vector3(_controller.velocity.x, 0.0f, _controller.velocity.z).magnitude;
@@ -239,7 +226,7 @@ namespace StarterAssets
             if (_animationBlend < 0.01f) _animationBlend = 0f;
 
             // normalise input direction
-            Vector3 inputDirection = new Vector3(0.0f, 0.0f, _input.move.x);
+            Vector3 inputDirection = new Vector3(0.0f, 0.0f, horizontalInput);
             
             // if the condition is true, ignore negative input on the Z axis
             if (_canOnlyMoveForward && inputDirection.z < 0)
@@ -250,7 +237,7 @@ namespace StarterAssets
 
             // note: Vector2's != operator uses approximation so is not floating point error prone, and is cheaper than magnitude
             // if there is a move input rotate player when the player is moving
-            if (_input.move != Vector2.zero)
+            if (horizontalInput != 0)
             {
                 _targetRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg;
                 float rotation = Mathf.SmoothDampAngle(transform.eulerAngles.y, _targetRotation, ref _rotationVelocity,
@@ -272,6 +259,25 @@ namespace StarterAssets
             {
                 _animator.SetFloat(_animIDSpeed, _animationBlend);
                 _animator.SetFloat(_animIDMotionSpeed, inputMagnitude);
+            }
+        }
+
+        private void FixedUpdate()
+        {
+            if (Grounded)
+            {
+                _jumpHeight = JumpHeight;
+                RaycastHit hit;
+
+                var pos = new Vector3(transform.position.x, transform.position.y + 1.8f, transform.position.z);
+                Ray rayUp = new Ray(pos, Vector3.up);
+
+                if (Physics.Raycast(rayUp, out hit) && hit.distance < JumpHeight)
+                {
+                    _jumpHeight = hit.distance + 0.6f;
+                }
+
+                Debug.Log(_jumpHeight);
             }
         }
 
@@ -299,7 +305,7 @@ namespace StarterAssets
                 if (_input.jump && _jumpTimeoutDelta <= 0.0f)
                 {
                     // the square root of H * -2 * G = how much velocity needed to reach desired height
-                    _verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * Gravity);
+                    _verticalVelocity = Mathf.Sqrt(_jumpHeight * -2f * Gravity);
 
                     // update animator if using character
                     if (_hasAnimator)
@@ -333,13 +339,6 @@ namespace StarterAssets
                     }
                 }
 
-                Vector3 ceilingPosition = new Vector3(transform.position.x, transform.position.y + CeilingOffset, transform.position.z);
-                bool hittingCeiling = Physics.CheckSphere(ceilingPosition, CeilingRadius, CeilingLayers, QueryTriggerInteraction.Ignore);
-
-                if (hittingCeiling)
-                {
-                    Gravity = 8000000000f;
-                }
                 // if we are not grounded, do not jump
                 _input.jump = false;
             }
@@ -349,8 +348,6 @@ namespace StarterAssets
             {
                 _verticalVelocity += Gravity * Time.deltaTime;
             }
-
-            Gravity = -15f;
         }
 
         private void OnDrawGizmosSelected()
@@ -365,6 +362,16 @@ namespace StarterAssets
             Gizmos.DrawSphere(
                 new Vector3(transform.position.x, transform.position.y - GroundedOffset, transform.position.z),
                 GroundedRadius);
+        }
+
+        private void OnDrawGizmos()
+        {
+            Color transparentBlue = new Color(0.0f, 0.0f, 1.0f, 0.35f);
+            Gizmos.color = transparentBlue;
+
+            var pos = new Vector3(transform.position.x, transform.position.y + 1.8f, transform.position.z);
+            Ray rayUp = new Ray(pos, Vector3.up);
+            Gizmos.DrawRay(rayUp);
         }
 
         private void OnFootstep(AnimationEvent animationEvent)
